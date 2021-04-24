@@ -2,7 +2,9 @@
 
 ### Projekt iz predmeta Statistička Analiza Podataka
 
-Projekt je napravljen u programskom jeziku R. 
+Ispitali smo na koji način metode preventivne zdravstvene zaštite utječu na zdravlje ljudi.  
+Projekt je pisan u programskom jeziku R.  
+(pogledati datoteku UtjecajPreventivneZdravstveneZastiteNaZdravlje.pdf)  
 
 ### Tim
 -Anja Delić  
