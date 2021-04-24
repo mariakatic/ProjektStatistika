@@ -1,0 +1,718 @@
+---
+title: "SAP - projekt"
+subtitle: "Utjecaj preventivne zdravstvene zaštite na zdravlje"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Opis skupa podataka:
+
+Skup podataka kojeg ćemo analizirati, ukupno 16000 podataka, sadrži podatke o metodama preventivne zdravstvene zaštite i ispitivanim bolestima među stanovništvom 500 gradova SAD-a. 
+
+Za svaki grad dani su podatci o udjelu stanovništva toga grada koje provodi određene metode zdravstvene zaštite i podatci o udjelu stanovištva toga grada koji pati od neke promatranih bolesti/zdravstvenih stanja. U istraživanju su promatrane četiri metode zdravstvene zaštite i 12 bolesti/zdravstvenih stanja.
+
+Podatci su dani u 10 stupaca koji redom predstavljaju: redni broj podatka, ime savezne države u kojoj se nalazi grad, ime grada, kategoriju ("Prevention" ili "Health Outcomes"), opis mjere, jedinica u kojoj su dani podatci (% za sve podatke), tip podatka ("AgeAdjPrv" ili "CrdPrv"), rezutat mjerenja (udio stanovništva koje provodi neku preventivnu mjeru ili ima neku bolest/zdravstveno stanje), broj stanovnika pojednig grada i kratki opis mjerenja.
+
+
+```{r}
+data = read.csv("dataset.csv")
+
+dim(data)
+
+```
+
+Primijetili smo da u skupu podataka 'data' za svaki grad imamo dva zapisa koji se razlikuju samo u podatku koji je zapisan u stupcu 'DataValueTypeID':"AgeAdjPrv" ili "CrdPrv". Ako je podatak tipa "AgeAdjPrv" to znači da rezultat, tj. podatak zapisan u stupcu 'Data_Value', predstavlja udio stanovništva koje provodi neku preventivnu mjeru ili imaja bolest/zdravstveno stanje u odnosu na stanovništvo promatranog grada koje odgovara dobnoj skupini nad kojom je provedeno ispitivanje. Ako je podatak tipa "CrdPrv" to znači da rezultat predstavlja udio stanovništva koje provodi neku preventivnu mjeru ili ima bolest/zdravstveno stanje u odnosu na cjelokupno stanovništvo toga grada.
+
+Odlučili smo za početak koristiti samo podatke čiji je tip "AgeAdjPrv", jer mislimo da ćemo time izbjeći pristranost. Naime, dobna struktura svih gradova nije ista i neki gradovi mogu imati pretežno starije stanovništvo koje je podložnije bolestima u odnosu na druge gradove.
+
+U skup podataka 'ageAdjData' izlučit ćemo samo podatke čiji je tip "AgeAdjPrv". 
+
+```{r}
+ageAdjData = data[data["DataValueTypeID"] == "AgeAdjPrv",]
+
+dim(ageAdjData)
+```
+
+
+Sada u skupu podataka 'ageAdjData' za svaki grad i za svaku mjeru imamo točno jedan podatak, ukupno 8000 podataka.
+
+Postoje dvije kategorije mjerenja (stupac 'Categories'): "Health outcomes" i "Prevention". Kategorija označuje sadrži li podatak informaciju o udjelu stanovništva nekog grada koji poduzimaju neku vrstu preventivne zaštite ili informaciju o udjelu stanovništva koji boluju od neke bolest/zdravstvenog stanja.
+Stupac 'Short_Question_Text' predstavlja kratki opis mjere i upravo ćemo zbog jasnoće i sažetosti koristiti taj skraćeni opis, umjesto cijelog naziva mjere.
+
+```{r}
+catPrevention = ageAdjData[ageAdjData$Category == "Prevention",]
+
+catHealtOutcomes = ageAdjData[ageAdjData$Category == "Health Outcomes",]
+
+```
+
+
+Tablica ispod sadrži sve mjere i njihove kraće opise. Vidimo da za svaku mjeru postoji točno 500 podataka, tj. po jedan podatak za svaki grad.
+```{r}
+library(dplyr)
+ageAdjData %>% group_by(Category, Measure, Short_Question_Text) %>% summarise(count = n())
+```
+
+
+U nastavku su prikazani pravokutni dijagrami (box plot) za svaku mjeru zaštite i bolest te su grupirani prema kategoriji kojoj podatci pripadaju. Svaki pravokutni dijagram nastao je iz ukupno 500 podataka, jer je istraživanje provedeno u 500 gradova. Pravokutni dijagram kombinira prikaz medijana, kvartila podataka, te najmanje i najveće vrijednosti. Prikaz pravokutnog dijagrama bitan je jer iz njega možemo iščitati stršeće vrijednosti. Primjećujemo da za većinu kategorija postoje stršeće vrijednosti, a u nastavku ćemo prokomentirati one kategorije kod kojih su one najizraženije.
+
+```{r, fig.height=10}
+library(ggplot2)
+
+ggplot(ageAdjData, aes(x = Short_Question_Text, y = Data_Value, fill = Category)) + 
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = 'top') + 
+  xlab('Measure') + ylab('Percentage') +
+  facet_grid(. ~ Category, scales = "free", space='free')
+
+```
+
+Primijetili smo da pravokutni dijagram za mjeru prevencije 'Health Insurance' ima najviše stršećih vrijednosti. U sljedećem dijagramu prikazano je 15 gradova koji imaju najveći postotak stanovništva koji nemaju zdravstveno osiguranje. Upravo su te vrijednosti stršeće vrijednosti pravokutnog dijagrama. 
+
+```{r}
+library(ggplot2)
+data.health.insurance <- subset(ageAdjData, Short_Question_Text == 'Health Insurance')
+data.health.insurance <- data.health.insurance[order(data.health.insurance$Data_Value, 
+                                                     decreasing = TRUE),]
+data.health.insurance <- data.health.insurance[1:15,]
+
+data.health.insurance$CityName <- paste0(data.health.insurance$CityName, ',', 
+                                         data.health.insurance$StateDesc)
+ggplot(data.health.insurance, aes(x = reorder(CityName, Data_Value),
+                                  y = Data_Value, fill = Data_Value)) +
+  geom_bar(stat = "identity",col = "black")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = 'none') +
+  ggtitle('15 gradova s najnižim postotkom zdravstvenih osiguranja') +
+  xlab('Grad') + ylab('Nemaju zdravstveno osiguranje [%]')
+
+```
+Istu stvar smo napravili i za bolest 'High Blood Pressure'. Primjećujemo da je nagib dijagrama za mjeru 'Health Insurance' puno strmiji od onog za bolest 'High Blood Pressure', zato što se u prvom slučaju stršeće vrijednosti nalaze u puno većem intervalu nego u drugom.
+
+```{r}
+library(ggplot2)
+data.high.blood.pressure <- subset(ageAdjData, Short_Question_Text == 'High Blood Pressure')
+data.high.blood.pressure <- data.high.blood.pressure[order(data.high.blood.pressure$Data_Value, 
+                                                           decreasing = TRUE),]
+data.high.blood.pressure <- data.high.blood.pressure[1:15,]
+
+data.high.blood.pressure$CityName <- paste0(data.high.blood.pressure$CityName, ',', 
+                                            data.high.blood.pressure$StateDesc)
+ggplot(data.high.blood.pressure, aes(x = reorder(CityName, Data_Value), y = Data_Value, 
+                                     fill = Data_Value)) +
+  geom_bar(stat = "identity",col = "black")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.position = 'none') +
+  ggtitle('15 gradova s najvišim postotkom ljudi s visokim tlakom') +
+  xlab('Grad') + ylab('Imaju visoki tlak [%]')
+
+```
+
+# 1) Postoji li neka metoda preventivne zaštite koja je "popularnija" u saveznoj državi Ohio nego u saveznoj državi Florida (odnosno, za koju je udio stanovnika savezne države Ohio većo od udjela stanovnika savezne države Florida)?
+
+Da bismo odgovorili na ovo pitanje, prvo ćemo provesti manipulacije nad skupom podataka kako bismo skupili sve informacije koje su nam potrebne i sistematski ih organizirati. Zatim ćemo podatke prikazati stupičastim dijagramom, usporediti popularnost svake metode preventivne zaštite u državama Ohio i Florida i naslutiti mogući odgovor na postavljeno pitanje. Za kraj ćemo provesti test o dvije proporcije za svaku metodu preventivne zaštite i donijeti zaključke. 
+
+Podatci u skopu podataka kojeg koristimo dani su za gradove, a za potrebe ovog zadatka trebamo ih poopćiti na savezne države. To ćemo učiniti tako da ćemo prvo izračunati ukupan broj ispitanika u nekoj saveznoj državi zbrajanjem broja ispitanika iz svih gradova u kojima je provedeno istraživanje za svaku državu. Ti su podatci prikazani u tablici populationData. Stupac PopulationCount je broj stanovnika toga grada, StatePopulationCount broj koji predstavlja zbroj stanovika svih gradova te države u kojima je provedeno istraživanje. Taj broj smatramo za naš skup podataka aproksimacijom broja stanovnika neke države. Primjećujemo da su s barem jednim gradom zastupljene sve savezne države (svih 50 i District of Columbia). 
+
+
+```{r}
+cityPopulationData <- ageAdjData %>% group_by(StateDesc, CityName, PopulationCount) %>% 
+  distinct(StateDesc, CityName, PopulationCount)
+
+ 
+statePopulationData <- cityPopulationData %>% group_by(StateDesc) %>% 
+  mutate(CityCount = n()) %>% group_by(StateDesc, CityCount) %>% 
+  summarise_at(vars(PopulationCount), list(StatePopulationCount = sum))
+
+
+populationData <- merge(cityPopulationData, statePopulationData, by="StateDesc")
+
+
+```
+
+U sljedećoj tablici, stateData, su po svim saveznim državama za svaku mjeru (bolesti ili mjeru prevencije) prikazani podatci o broju stanovnika u državi (StatePopulationCount), broj stanovnika u toj državi koji odgovara nekoj mjeri, tj. koji ima određenu bolest ili prakticira mjeru prevencije (Data_Value_Population_Count) i odgovarajući postotak (Data_Value) u odnosu na ukupan broj ispitanika u državi.
+
+```{r}
+stateData = ageAdjData %>% mutate(Data_Value_Population_Count = 
+                                  round(Data_Value*0.01*PopulationCount, digits = 0))
+
+stateData = merge(stateData, populationData)
+
+stateData = stateData %>% 
+  group_by(StateDesc, Short_Question_Text, Category, StatePopulationCount, Data_Value_Unit) %>% 
+  summarise_at(vars(Data_Value_Population_Count), list(Data_Value_Population_Count = sum))
+
+stateData = stateData %>% mutate(Data_Value = 
+                                round((Data_Value_Population_Count/StatePopulationCount)*100, 
+                                        digits = 1))
+
+stateData = stateData[c(1, 2, 3, 4, 6, 5, 7)]
+stateData
+```
+
+U sljedećoj tablici, o_f_prevention, su iz prethodne tablice filtrirani podatci za države Ohio i Florida i mjere prevencije.
+
+```{r}
+o_f_prevention = stateData %>% 
+  filter(Category == "Prevention" & (StateDesc =="Ohio" | StateDesc =="Florida")) %>% 
+  arrange(desc(StateDesc))  %>% arrange(Short_Question_Text)
+o_f_prevention
+```
+
+Na sljedećem dijagramu vidimo odnos popularnosti mjera prevencije za države Ohio i Florida. Iz dijagrama naslućujemo da su mjere prevencije "Anual Checkup" i "Taking BP Medication" popularnije u državi Ohio nego u Floridi. Također, treba obratiti pozornost na značenje mjere "Health Insurance", a pogledamo li njezin puni naziv vidjet ćemo da ona označava ispitanike koji nemaju zdravstveno osiguranje. Prema tome, za mjeru "Health Insurance" možemo naslutiti da u saveznoj državi Ohio preventivna mjera zdravstvenog osiguranja (u smislu ljudi koji imaju zdravstveno osiguranje) popularnija nego u Floridi.
+
+
+```{r, fig.width=8}
+
+ohio <- (o_f_prevention %>% filter(StateDesc == "Ohio"))$Data_Value
+florida <- (o_f_prevention %>% filter(StateDesc == "Florida"))$Data_Value
+
+
+states <- t(cbind(ohio, florida))
+
+
+barplot(states, beside=TRUE, col=c("blue", "red"),xlab = "Mjere prevencije", 
+        ylab = "Postotak",cex.names=0.8,
+        names.arg = unique(o_f_prevention$Short_Question_Text), ylim=c(0,100), 
+        main="Odnos popularnosti mjera prevencije u saveznim državama Ohio i Florida")
+
+
+legend("topright",c("Ohio","Florida"),fill = c("blue", "red"))
+
+
+```
+
+Provedimo sada test o dvije proporcije za svaku mjeru prevencije.
+
+Test o dvije proporcije u programskom paketu R implementiran je u funkciji `prop.test()`. Pretpostavka z-testa je da je n dovoljno velik, što u našem slučaju je. 
+
+Testovi za svaku mjeru prevencije će biti postavljeni kao:
+H0: p(ohio) = p(florida)
+H1: p(ohio) > p(florida) s 95%-tnim intervalom pouzdanosti. 
+Osim u slučaju mjere prevencije "Health Insurance", tada će alternativna hipoteza biti H1: p(ohio) < p(florida), jer ta mjera obilježava ispitanike koji nemaju zdravstveno osiguranje.
+
+### Anual Checkup:
+U donjem ispisu vidimo da je p-vrijednost manja od razine signifikantnosti 0.05 pa odbacujemo hipotezu H0 i zaključujemo da je mjera prevencije "Anual Checkup" popularnija u saveznoj državi Ohio nego u saveznoj državi Florida.
+
+```{r}
+o_f_anual_checkup = o_f_prevention %>% filter(Short_Question_Text == "Annual Checkup")
+
+prop.test(x = o_f_anual_checkup$Data_Value_Population_Count, 
+          n = o_f_anual_checkup$StatePopulationCount, alternative = "greater", 
+          conf.level = 0.95, correct = FALSE)
+```
+
+### Cholesterol Screening:
+U donjem ispisu vidimo da je p-vrijednost veća od razine signifikantnosti 0.05 pa ne možemo odbaciti hipotezu H0.
+
+```{r}
+o_f_cholesterol_screening = o_f_prevention %>% 
+  filter(Short_Question_Text == "Cholesterol Screening")
+prop.test(x = o_f_cholesterol_screening$Data_Value_Population_Count,
+          n = o_f_cholesterol_screening$StatePopulationCount, alternative = "greater", 
+          conf.level = 0.95, correct = FALSE)
+
+```
+### Health Insurance:
+U donjem ispisu vidimo da je p-vrijednost manja od razine signifikantnosti 0.05 pa odbacujemo hipotezu H0 i zaključujemo da je mjera prevencije "Health Insurance" popularnija (u smislu popularnije je imati zdravstveno osiguranje) u saveznoj državi Ohio nego u saveznoj državi Florida.
+
+```{r}
+o_f_health_insurence = o_f_prevention %>% 
+  filter(Short_Question_Text == "Health Insurance")
+prop.test(x = o_f_health_insurence$Data_Value_Population_Count, 
+          n = o_f_health_insurence$StatePopulationCount, alternative = "less", 
+          conf.level = 0.95, correct = FALSE)
+```
+
+### Taking BP Medication
+U donjem ispisu vidimo da je p-vrijednost manja od razine signifikantnosti 0.05 pa odbacujemo hipotezu H0 i zaključujemo da je mjera prevencije "Taking BP Medication" popularnija u saveznoj državi Ohio nego u saveznoj državi Florida.
+```{r}
+o_f_taking_bpmedication_ = o_f_prevention %>% 
+  filter(Short_Question_Text == "Taking BP Medication")
+prop.test(x = o_f_taking_bpmedication_$Data_Value_Population_Count, 
+          n = o_f_taking_bpmedication_$StatePopulationCount, alternative = "greater", 
+          conf.level = 0.95, correct = FALSE)
+```
+Zaključujemo da postoji više metoda preventivne zaštite koja su "popularnije" u saveznoj državi Ohio nego u saveznoj državi Florida, i to su: Anual Checkup, Cholesterol Screening, Health Insurance i Taking BP Medication.
+
+# 2) Sami proizvoljno izaberite neke tri savezne države koje su vam možda najzanimljivije. Je li postotak stanovništa koji boluje od kroničnih plućnih bolesti jednak za sve tri države?
+
+Početni cilj nam je odrediti postotak stanovništva koji boluje od kroničnih plućnih bolesti u saveznim državama.
+
+Radimo novu tablicu plućne u kojoj se nalaze samo plućne bolesti i u novu varijablu Apsbrojoboljelih izračunavamo broj oboljelih od određene plućne bolesti u pojedinom gradu.
+
+
+```{r}
+plucne = catHealtOutcomes[catHealtOutcomes$Short_Question_Text == c("COPD"),]
+plucne$ApsbrojOboljelih = round(plucne$Data_Value * plucne$PopulationCount * 0.01, 
+                                digits = 0)
+```
+
+Nakon što smo izračunali broj oboljelih i ukupan broj stanovništva saveznih država ubacujemo te podatke u novu tablicu brploboljelih i dijeljenjem ta dva podatka dobivamo postotak kronično plućno oboljelih u saveznim državama. Postotak smo poredali od većeg prema manjem.
+
+```{r}
+brploboljelih = plucne %>% group_by(StateDesc) %>% 
+  summarise(sumbrploboljelih = sum(ApsbrojOboljelih))
+brploboljelih$PopulationCount = statePopulationData$StatePopulationCount
+brploboljelih$postotak = round(brploboljelih$sumbrploboljelih / 
+                                 brploboljelih$PopulationCount * 100, digits = 2)
+brploboljelih = brploboljelih %>% arrange(desc(postotak))
+brploboljelih
+```
+
+Jedan od razloga plućnog oboljenja ljudi je zagađenost zraka do koje najčešće dolazi zbog prevelike napučenosti određenog područja. Stoga smo zaključili da bi bilo zanimljivo proučavati savezne države koje se razlikuju po napučenosti, odnosno države koje se razlikuju po broju stanovnika, a površinom su približno jednake. 
+
+Prvo smo u tablicu poredanoPopulationCount poredali države po broju stanovnika. Zatim smo iz tablice izdvojili saveznu državu Maine koja je jedna od najmanje napučenih, saveznu državu New York koja je jedna od najnapučenijih i saveznu državu Louisiana koja je srednje napučena. Za te tri savezne države ćemo utvrditi je li jednak postotak stanovništa koji boluje od kroničnih plućnih bolesti.
+
+```{r}
+poredanoPopulationCount = brploboljelih %>% arrange(desc(PopulationCount))
+brploboljelih$brZdravih = brploboljelih$PopulationCount - brploboljelih$sumbrploboljelih
+```
+
+Izdvajamo podatke za saveznu državu Maine u novu tablicu.
+
+```{r}
+plMaine = brploboljelih %>% filter(StateDesc == "Maine") 
+plMaine
+```
+Izdvajamo podatke za saveznu državu New York u novu tablicu.
+
+```{r}
+plNewYork = brploboljelih %>% filter(StateDesc == "New York") 
+plNewYork
+```
+Izdvajamo podatke za saveznu državu Louisiana u novu tablicu.
+
+```{r}
+plLouisiana = brploboljelih %>% filter(StateDesc == "Louisiana") 
+plLouisiana
+```
+
+Razliku u zastupljenosti kroničnih plućnih bolesti u ove tri savezne države predočavamo stupičasti dijagram u nastavku. Zbog veće uočljivosti razlika među državama y-os smo ograničili na 20%. Iz histograma možemo uočiti da napučenije države ne moraju imati veći postotak plućno oboljelih od manje napučenih država. Iz čega zaključujemo da napučenost nije jedini uzrok povečanog broja kroničnih plućnih bolesti kod ljudi. Također, možemo naslutiti da postotak plućno oboljelih u ove tri savezne države nije jednak što ćemo provjeriti testom u nastavku.
+
+```{r}
+plStates <- t(cbind(plNewYork$postotak, plMaine$postotak, plLouisiana$postotak))
+
+barplot(plStates,beside=TRUE, col=c("blue", "red", "green"), 
+        ylab = "Udio plućno oboljelog stanovništva [%]", cex.names=0.2, xlab = "Države",
+        ylim=c(0,20), main="Zastupljenost plućnih bolesti u New Yorku, Maineu i Louisiani")
+
+
+legend("topright",c("New York", "Maine", "Louisiana"),fill = c("blue", "red", "green"))
+```
+Sada konačno možemo testirati jednakost postotka kronično plućno oboljelog stanovnišva u ovim saveznim državama. S obzirom da treba ispitati jednakost više proporcija koristit ćemo $\chi^2$ test, odnosno test homogenosti. 
+Za početak ćemo napravi kontigencijsku tablicu varijabli saveznih država i broja zdravih i oboljelih.
+
+```{r}
+sumZarazeni = plNewYork$sumbrploboljelih + plMaine$sumbrploboljelih + 
+  plLouisiana$sumbrploboljelih
+sumZdravi = plNewYork$brZdravih + plMaine$brZdravih + plLouisiana$brZdravih
+
+tbl <- data.frame("NewYork" = c(plNewYork$sumbrploboljelih, plNewYork$brZdravih, 
+                                plNewYork$PopulationCount),
+                  "Maine" = c(plMaine$sumbrploboljelih, plMaine$brZdravih, 
+                              plMaine$PopulationCount),
+                  "Louisiana" = c(plLouisiana$sumbrploboljelih, plLouisiana$brZdravih, 
+                                  plLouisiana$PopulationCount),
+                  "sum" = c(sumZarazeni, sumZdravi, sumZarazeni + sumZdravi))
+rownames(tbl) <- c("oboljeli", "zdravi", "sum")
+tbl
+
+```
+
+Test je postavljen kao:
+H0: p(NewYork) = p(Maine) = p(Louisiana)
+H1: p(NewYork), p(Maine), p(Louisiana) nisu jednake s 95%-tnim intervalom pouzdanosti.
+
+Pretpostavka testa je da očekivana frekvencija pojedinog razreda mora biti veća ili jednaka 5 (`chisq.test()` pretpostavlja da je ovaj uvjet zadovoljen stoga je prije provođenja testa potrebno to provjeriti).
+
+```{r}
+for (col_names in colnames(tbl)){
+  for (row_names in rownames(tbl)){
+    if (!(row_names == 'sum' | col_names == 'sum') ){
+      cat('Očekivane frekvencije za razred ',col_names,'-',row_names,': ',
+          (tbl[row_names,'sum'] * tbl['sum',col_names]) / tbl['sum','sum'],'\n')
+    }
+  }
+}
+```
+Sve očekivane frekvencije su veće od 5. Možemo nastaviti sa $\chi^2$ testom.
+
+```{r}
+chisq.test(tbl)
+```
+Provedbom $\chi^2$ testa zbog p-vrijednosti koja je manja od razine signifikantnosti 0.05 zaključujemo da postotak stanovništa koji boluje od kroničnih plućnih bolesti nije jednak u saveznim državama New York, Louisiana i Maine.
+
+
+
+#Usporedba saveznih država s najmanjim i najvećim postotkom ljudi koji imaju zdravstveno osiguranje
+
+```{r}
+#Savezna država s najvišim postotkom stanovništva koji imaju zdravstveno osiguranje
+data.health.insurance <- subset(stateData, Short_Question_Text == 'Health Insurance')
+data.health.insurance <- data.health.insurance[order(data.health.insurance$Data_Value, 
+                                                     decreasing = FALSE),]
+data.health.insurance <- data.health.insurance[1:1,]
+data.health.insurance
+
+#savezna država s najnižim postotkom stanovništva koji imaju zdravstveno osiguranje
+data.health.insurance <- subset(stateData, Short_Question_Text == 'Health Insurance')
+data.health.insurance <- data.health.insurance[order(data.health.insurance$Data_Value,
+                                                     decreasing = TRUE),]
+data.health.insurance <- data.health.insurance[1:1,]
+data.health.insurance
+```
+
+Vermont je savezna država s najvišim postotkom stanovništva koji imaju zdravstveno osiguranje, a Texas je savezna država s najnižim postotkom stanovništva sa zdravstvenim osiguranjem.
+Odlučili smo na bar plotu vidjeti odnos postotka ljudi s određenim zdravstvenim problemima u saveznim državama Texas i Vermont te bi iz danog grafa mogli naslutiti na koje bolesti utječe mali postotak ljudi s zdravstvenim osiguranjem.
+
+```{r}
+texasData <- subset(stateData, StateDesc == "Texas")
+texasData <- subset(texasData, Category == "Health Outcomes")
+
+vermontData <- subset(stateData, StateDesc == "Vermont")
+vermontData <- subset(vermontData, Category == "Health Outcomes")
+
+healthStates <- t(cbind(texasData$Data_Value, vermontData$Data_Value))
+
+par(mar=c(9,4,4,4))
+
+barplot(healthStates,beside=TRUE, col=c("red", "blue"), 
+        ylab = "Udio stanovništva savezne države",
+         cex.names=0.8,
+        names.arg = c(vermontData$Short_Question_Text), ylim=c(0,40), 
+        main="Odnos zdravstvenih problema u saveznim državama Texas i Vermont", 
+        
+      las=2)
+
+legend("topright",c("Texas","Vermont"),fill = c("red", "blue"))
+
+```
+
+Iz danog grafa naslućuje se da zdravstveno osiguranje najviše utječe na postotak stanovništva koji pate od dijabetesa, visokog krvnog tlaka i povišenog kolesterola.
+Također, naizgled se čini da zdravstveno osiguranje nema utjecaja neke druge bolesti, kao npr. plućne bolesti ili mentalne bolesti.
+Odlučili smo testirati jednakost postotka ljudi koji pate od visokog krvnog tlaka u Texasu i Vermontu.
+
+
+U sljedećoj tablici v_t_healthOutcomes su iz tablice stateData filtrirani podatci za države Texas i Vermont i mjere bolesti.
+```{r}
+v_t_healthOutcomes = stateData %>% 
+  filter(Category == "Health Outcomes" & (StateDesc =="Texas" | StateDesc =="Vermont")) %>%
+  arrange(desc(StateDesc))  %>% arrange(Short_Question_Text)
+v_t_healthOutcomes
+```
+
+Provodimo test o dvije proporcije za mjeru bolesti "High Blood Pressure" i za mjeru bolesti "Mental Health".
+
+Testovi za svaku mjeru prevencije će biti postavljeni kao:
+H0: p(vermont) = p(texas)
+H1: p(vermont) < p(texas) s 95%-tnim intervalom pouzdanosti. 
+
+
+### High Blood Pressure:
+U donjem ispisu vidimo da je p-vrijednost manja od razine signifikantnosti 0.05 pa odbacujemo hipotezu H0 i zaključujemo da je mjera bolesti "High Blood Pressure" popularnija u saveznoj državi Texas nego u saveznoj državi Vermont.
+```{r}
+v_t_highBloodPressure = v_t_healthOutcomes %>% 
+  filter(Short_Question_Text == "High Blood Pressure")
+
+prop.test(x = v_t_highBloodPressure$Data_Value_Population_Count, 
+          n = v_t_highBloodPressure$StatePopulationCount, alternative = "less", 
+          conf.level = 0.95, correct = FALSE)
+```
+
+### Mental Health:
+U donjem ispisu vidimo da je p-vrijednost veća od razine signifikantnosti 0.05 te ne možemo odbaciti hipotezu H0. P-vrijednost je blizu vrijednosti 0.5 te možemo zaključiti da su postotci ljudi približno jednaki.
+```{r}
+v_t_mentalHealth = v_t_healthOutcomes %>% filter(Short_Question_Text == "Mental Health")
+
+prop.test(x = v_t_mentalHealth$Data_Value_Population_Count, 
+          n = v_t_mentalHealth$StatePopulationCount, alternative = "less", 
+          conf.level = 0.95, correct = FALSE)
+```
+Ova dva testa dala su nam zanimljive rezultate. Daje se naslutiti da zdravstveno osiguranje nema utjecaja na sve bolesti u pojedinoj državi. Definitvno je zanimljivo razmisliti o razlogu zašto bi zdravstveno osiguranje više utjecalo na količinu ljudi koji pate od povišenog krvnog tlaka nego na količinu ljudi koji pate od mentalnih bolesti. Vjerojatno postoje drugi faktori koji bolje opisuju zašto zdravstveno osiguranje manje utječe na neke bolesti, no takve zaključke ne možemo naslutiti iz provedenog istraživanja.
+
+
+
+# 3) Ispitajte veze izmedu ove 4 metode preventivne zaštite i pojedine bolesti. Koje metode imaju najveći utjecaj? Na koje bolesti? Što ste od zavisnosti očekivali, a što vas je iznenadilo?
+
+Ispitujemo vezu između nedostatka zdrastvenog osiguranja (u tablici "Current lack of health insurance among adults aged 18–64 Years") i dijabetesa (u tablici "Diagnosed diabetes among adults aged >=18 Years"). 
+
+Prvo ćemo za svaki grad filtrirati dva podatka: broj građana koji nemaju zdravstveno osiguranje te broj građana koji imaju dijabetes. 
+Budući da promatramo utjecaj jedne nezavisne varijable (nedostatak zdravstvenog osiguranja) na zavisnu (dijabetes), prigodni prikaz njihovog odnosa će nam pokazati scatter plot. Dakle svaki grad će biti predstavljen jednom točkom u dijagramu.
+
+
+```{r}
+data %>% filter(Short_Question_Text == "Health Insurance") %>% 
+  summarise(health_insurance_value = Data_Value, city = CityName) -> 
+  health_insurance_data
+data %>% filter(Short_Question_Text == "Diabetes") %>% 
+  summarise(diabetes_value = Data_Value, city = CityName) -> diabetes_data
+health_insurance_diabetes <- merge(diabetes_data,health_insurance_data,by="city")
+health_insurance_diabetes %>% group_by(city) %>% 
+  summarise(diabetes_value = mean(diabetes_value), 
+  health_insurance_value = mean(health_insurance_value)) -> health_insurance_diabetes
+
+plot(health_insurance_diabetes$health_insurance_value, 
+     health_insurance_diabetes$diabetes_value, 
+     xlab="nedostatak zdravstvenog osiguranja", ylab="dijabetes")
+```
+
+Vidimo iz scatter plota da nedostatak zdravstvenog osiguranja ima izražen utjecaj na broj dijabetičara. Možemo primjetiti da što više ljudi nema zdravsteno osiguranje to ima više ljudi koji imaju dijabetes, što ima smisla. Kako bismo ispitali utjecaj navedene prevencije na navedenu bolest, procijenit ćemo model jednostavne regresije sa prevencijom kao nezavisnom varijablom (regresorom) te bolešću kao zavisnom varijablom.
+
+```{r}
+fit_ins_diabetes = lm(diabetes_value~health_insurance_value,
+                      data=health_insurance_diabetes) 
+plot(health_insurance_diabetes$health_insurance_value,
+     health_insurance_diabetes$diabetes_value,  
+     xlab="nedostatak zdravstvenog osiguranja", 
+     ylab="dijabetes") #graficki prikaz podataka
+lines(health_insurance_diabetes$health_insurance_value,
+      fit_ins_diabetes$fitted.values,col='red') 
+#graficki prikaz procijenjenih vrijednosti iz modela
+```
+Kako bismo dobiveni modeli mogli analizirati, prvo je potrebno provjeriti da pretpostavke modela nisu narušene. Pritom ćemo provjeravati dvije pretpostavke modela: normalnost reziduala i homogenost varijance.
+
+
+Normalnost reziduala ćemo provjeriti grafički, pomoću kvantil-kvantil plota (usporedbom s linijom normalne razdiobe), te statistički pomoću Kolmogorov-Smirnovljevog testa te Lillieforceve inačica Kolmogorov-Smirnovljevog testa (ne poznaju se očekivanje i varijanca populacije, a Lillieforceov test je upravo za takvu primjenu). Homogenost varijance ćemo provjeriti pomoću grafa reziduala u ovisnosti o izlazu modela. 
+
+
+
+```{r}
+selected.model = fit_ins_diabetes
+
+#Grafički prikaz reziduala samo po indeksu - ne možemo zaključiti ništa o normalnosti
+plot(selected.model$residuals,
+     xlab="indeksi", 
+     ylab="reziduali")
+```
+Na gornjem scatter plotu možemo vidjeti sve reziduale. Ovaj prikaz nam nije jako interpretativan pa ćemo preći na sljedeće prikaze.
+
+```{r}
+#Histogram reziduala
+hist((selected.model$residuals))
+
+#Histogram standardiziranih reziduala
+hist(rstandard(selected.model))
+```
+
+Gore su prikazana dva histograma. Prvi histogram prikazuje "sirove reziduale" dok drugi prikazuje standardizirane reziduale. Možemo primjetiti da su distribucije lagano zakrivljene u desno. Drugi histogram je interpretativniji jer očekujemo da se standardizirani reziduali ponašaju normalno. Također, standardizirane reziduale ćemo testirati na normalnost. To je ujedno i razlog zbog kojeg standardizirane reziduale koristimo i u q-q plotu.
+```{r}
+#q-q plot reziduala s linijom normalne distribucije
+qqnorm(rstandard(selected.model))
+qqline(rstandard(selected.model))
+```
+
+Iznad je prikazan q-q plot reziduala s linijom normalne distribucije. Vidimo da q-q plot nije savršen zbog velikih odstupanja nekih točaka od linije normalnosti. 
+```{r}
+plot(selected.model$fitted.values,selected.model$residuals,
+      xlab="izlaz modela", 
+     ylab="reziduali") 
+#reziduale je dobro prikazati u ovisnosti o procjenama modela
+```
+Iznad su prikazani reziduali u odnosu na izlazne vrijednosti modela. Postoji područje gdje su neki reziduali veći u odnosu na ostatak. Budući da reziduali nisu uvijek u istom intervalu, nije ispunjena pretpostavka homogenosti varijance. To znači da neki dio varijabilnosti nije objašnjen našim modelom.
+
+```{r}
+#Kolmogorov-Smirnovljev test na normalnost 
+ks.test(rstandard(selected.model),'pnorm')
+
+#Lillieforceov test na normalnost
+require(nortest)
+lillie.test(rstandard(selected.model))
+```
+Gornji testovi ne mogu potvrditi našu pretpostavku da su reziduali normalni. Nul-hipoteza oba testa je da su reziduali normalni, a zbog male p-vrijednosti možemo odbaciti nul-hipotezu. Dakle, nećemo dalje analizirati ovaj model (osim summaryja) jer ne možemo pretpostaviti normalnost reziduala. Treba napomenuti da testove provodimo nad standardiziranim rezidualima.
+
+
+Iz summaryja modela možemo očitati sljedeće nama značajne vrijednosti: vidimo da je p-vrijednost F-statistike jako mala pa možemo zaključiti da je model signifikantan.
+
+Također možemo očitati koeficijent deteminacije $R^2$. On je bitan pokazatelj kvalitete prilagodbe modela koji nam govori koliki je postotak varijance u modelu obuhvaćen tj. objašnjen našim modelom.
+
+
+```{r}
+summary(selected.model)
+```
+
+Provjerimo kako ostale prevencije utječu na broj dijabetičara. Provjerimo jesu li svi modeli signifikantni.
+
+Prvo provjeravamo model kojem je nezavisna varijabla broj građana koji su obavili rutinski pregled kod u zadnjih godinu dana. (u tablici "Visits to doctor for routine checkup within the past Year among adults aged >=18 Years"). Zavisna varijabla ostaje u svakom modelu ista.
+
+```{r}
+#regresije s ostalim metodama prevencije - jesu li signifikantne?
+
+data %>% filter(Short_Question_Text == "Annual Checkup") %>% 
+  summarise(annual_checkup_value = Data_Value, city = CityName) -> annual_checkup_data
+data %>% filter(Short_Question_Text == "Diabetes") %>% 
+  summarise(diabetes_value = Data_Value, city = CityName) -> diabetes_data
+annual_checkup_diabetes <- merge(diabetes_data,annual_checkup_data,by="city")
+annual_checkup_diabetes%>% group_by(city) %>% 
+  summarise(diabetes_value = mean(diabetes_value), 
+            annual_checkup_value = mean(annual_checkup_value)) -> annual_checkup_diabetes
+
+
+fit_ann_diabetes = lm(diabetes_value~annual_checkup_value,data=annual_checkup_diabetes) 
+plot(annual_checkup_diabetes$annual_checkup_value, annual_checkup_diabetes$diabetes_value, 
+     xlab="pregled kod doktora", ylab="dijabetes")
+lines(annual_checkup_diabetes$annual_checkup_value,fit_ann_diabetes$fitted.values,col='red')
+
+
+summary(fit_ann_diabetes)
+
+```
+Model je signifikantan (jako mala p-vrijednost) i objašnjava otrpilike 14.5% varijance.
+
+Iduće provjeravamo model kojem je nezavisna varijabla broj građana koji obavljaju snimanje kolesterola u krvi (u tablici "Cholesterol screening among adults aged >=18 Years").
+
+```{r}
+data %>% filter(Short_Question_Text == "Cholesterol Screening") %>% 
+  summarise(cholesterol_screening_value = Data_Value, 
+            city = CityName) -> cholesterol_screening_data
+data %>% filter(Short_Question_Text == "Diabetes") %>% 
+  summarise(diabetes_value = Data_Value, city = CityName) -> diabetes_data
+cholesterol_screening_diabetes <- merge(diabetes_data,cholesterol_screening_data,by="city")
+cholesterol_screening_diabetes %>% group_by(city) %>% 
+  summarise(diabetes_value = mean(diabetes_value), 
+            cholesterol_screening_value = mean(cholesterol_screening_value)) -> 
+  cholesterol_screening_diabetes
+
+fit_cs_diabetes = lm(diabetes_value~cholesterol_screening_value,
+                     data=cholesterol_screening_diabetes) 
+plot(cholesterol_screening_diabetes$cholesterol_screening_value, 
+     cholesterol_screening_diabetes$diabetes_value, xlab="snimanje kolesterola", 
+     ylab="dijabetes")
+lines(cholesterol_screening_diabetes$cholesterol_screening_value,
+      fit_cs_diabetes$fitted.values,col='red')
+
+summary(fit_cs_diabetes)
+```
+
+Model je signifikantan (jako mala p-vrijednost) i objašnjava otrpilike 14.56% varijance.
+
+Konačno, provjeravamo model kojem je nezavisna varijabla broj građana koji imaju visok tlak te uzimaju lijekove za visoki tlak (u tablici "Taking medicine for high blood pressure control among adults aged >=18 Years with high blood pressure"). 
+
+
+```{r}
+data %>% filter(Short_Question_Text == "Taking BP Medication") %>% 
+  summarise(taking_bp_med_value = Data_Value, city = CityName) -> taking_bp_med_data
+data %>% filter(Short_Question_Text == "Diabetes") %>% 
+  summarise(diabetes_value = Data_Value, city = CityName) -> diabetes_data
+taking_bp_med_diabetes <- merge(diabetes_data,taking_bp_med_data,by="city")
+taking_bp_med_diabetes  %>% group_by(city) %>% 
+  summarise(diabetes_value = mean(diabetes_value), 
+            taking_bp_med_value = mean(taking_bp_med_value)) -> taking_bp_med_diabetes 
+
+fit_bp_diabetes = lm(diabetes_value~taking_bp_med_value,data=taking_bp_med_diabetes) 
+plot(taking_bp_med_diabetes $taking_bp_med_value, taking_bp_med_diabetes $diabetes_value, 
+     xlab="uzimanje lijekova za visoki tlak", ylab="dijabetes")
+lines(taking_bp_med_diabetes$taking_bp_med_value,fit_bp_diabetes$fitted.values,col='red')
+
+summary(fit_bp_diabetes)
+```
+Model je signifikantan (jako mala p-vrijednost) i objašnjava otrpilike 27.9% varijance.
+
+Svi su modeli signifikantni odnosno sve prevencije utječu na broj dijabetičara. Dakle, možemo odabrati bilo koji skup prevencija od navedenih četiri za višestruku regresiju (uz poštivanje daljnih pretpostavki modela).
+
+Za višestruku regresiju osim normalnosti reziduala i homogenosti varijance moramo provjeriti i da regresori nisu međusobno jako korelirani.
+
+```{r}
+#višestruka regresija
+
+#korelacija
+
+cor(cbind(health_insurance_diabetes$health_insurance_value, 
+          annual_checkup_diabetes$annual_checkup_value, 
+          taking_bp_med_diabetes$taking_bp_med_value, 
+          cholesterol_screening_diabetes$cholesterol_screening_value)) 
+# korelacijski koeficijenti parova regresora
+```
+Iz tablice vidimo da su druga (rutinski pregled kod doktora) i treća (uzimanje lijekova za visoki tlak kod pacijenata s visokim tlakom) varijabla jako korelirane. Njihov korelacijski koeficijent iznosi približno 0.7959%. Zato ćemo jednu od tih dviju varijabli morati maknuti iz modela višestruke regresije.
+
+Odlučivat ćemo na temelju $R^2$ vrijednosti gornjih modela. Naime, model sa rutinskim pregledom kao zavisnom varijablom imao je vrijednost $R^2 = 14.5$ dok je model sa uzimanjem lijekova za visoki tlak kod pacijenata s visokim tlakom kao zavisnom varijablom imao $R^2 = 27.9$.
+Uzimajući te vrijednosti u obzir, izbacujemo varijablu "rutinski pregled kod doktora" iz modela.
+
+```{r}
+#zajednicki dataset
+total <- merge(health_insurance_diabetes, taking_bp_med_diabetes)
+total <- merge(total, cholesterol_screening_diabetes)
+
+
+#višetruka regresija
+fit.multi = lm(diabetes_value ~ health_insurance_value + taking_bp_med_value + 
+                 cholesterol_screening_value, total)
+```
+Kao i u jednostavnoj regresiji, potrebno je provjeriti da pretpostavke modela nisu narušene. Pritom ćemo provjeravati dvije pretpostavke modela: normalnost reziduala i homogenost varijance.
+
+
+Normalnost reziduala ćemo provjeriti grafički, pomoću kvantil-kvantil plota (usporedbom s linijom normalne razdiobe), te statistički pomoću Kolmogorov-Smirnovljevog testa te Lillieforceve inačica Kolmogorov-Smirnovljevog testa (ne poznaju se očekivanje i varijanca populacije, a Lillieforceov test je upravo za takvu primjenu). Homogenost varijance ćemo provjeriti pomoću grafa reziduala u ovisnosti o izlazu modela.
+
+
+```{r}
+selected.model = fit.multi
+
+plot(selected.model$fitted.values,selected.model$residuals,
+      xlab="indeksi", 
+     ylab="reziduali")
+```
+
+Na gornjem scatter plotu možemo vidjeti sve reziduale. Ovaj prikaz nam nije jako interpretativan pa ćemo preći na sljedeće prikaze.
+```{r}
+hist((selected.model$residuals))
+hist(rstandard(selected.model))
+```
+
+Gore su prikazana dva histograma. Prvi histogram prikazuje "sirove reziduale" dok drugi prikazuje standardizirane reziduale. Kao i u jednostavnoj regresiji, možemo vidjeti da su distribucije lagano zakrivljene u desno.
+
+```{r}
+qqnorm(rstandard(selected.model))
+qqline(rstandard(selected.model))
+```
+
+Iznad je prikazan q-q plot reziduala s linijom normalne distribucije. Vidimo da q-q plot i dalje nije savršen, no izgleda "bolje" nego u jednostanvoj regresiji.
+```{r}
+plot(selected.model$fitted.values,selected.model$residuals,
+      xlab="izlazi modela", 
+     ylab="reziduali")
+```
+Iznad su prikazani reziduali u odnosu na izlazne vrijednosti modela. Postoji područje gdje su neki reziduali veći u odnosu na ostatak. Budući da reziduali nisu uvijek u istom intervalu, ne možemo pretpostaviti homogenost varijance. To znači da neki dio varijabilnosti nije objašnjen našim modelom.
+
+```{r}
+ks.test(rstandard(fit.multi),'pnorm')
+
+require(nortest)
+lillie.test(rstandard(fit.multi))
+```
+Rezultati testova na normalnost su mnogo bolji nego kod jednostavne regresije. Uz razinu signifikantnosti 5% ne možemo odbaciti nul-hipotezu (normalnost reziduala).
+
+```{r}
+summary(fit.multi)
+
+```
+Iz summaryja modela višestruke regresije možemo isčitati da je vrijednost $R^2 = 0.7221$, odnosno da je 72.21% varijance objašnjeno našim modelom. To je značajno više nego u modelu jednostavne regresije. Također, p-vrijednost je očekivano mala (u svakoj jednostavnoj regresiji je bila mala) pa je model signifikantan.
+
+
+
+
+Osim ovisnosti bolesti o mjerama prevencije, odlučili smo istražiti ovisi li ikoja mjera prevencije o nekoj drugoj. Odlučili smo se za model gdje je nezavisna varijabla nedostatak zdravstvenog osiguranja, a zavisna snimanje kolesterola. Drugim riječima, provjeravali smo hoće li ljudi koji imaju zdravstveno osiguranje češće kotrolirati kolesterol od onih koji nemaju. Naš je model nepotpun pa nismo ni provjeravali pretpostavke modela, no možemo vidjeti da ovisnost između varijabli postoji. Moguće je da zdravstveno osiguranje pokriva kontrolu kolesterola u nekim državama pa smo zato dobili takve rezultate.
+
+```{r}
+health_insurance_data <- ageAdjData %>% 
+  filter(Short_Question_Text == "Health Insurance") %>% 
+  summarise(health_insurance_value = Data_Value, city = CityName)
+
+cholesterol_screening_data <- ageAdjData %>% 
+  filter(Short_Question_Text == "Cholesterol Screening") %>% 
+  summarise(cholesterol_screening_value = Data_Value, city = CityName)
+
+total <- merge(cholesterol_screening_data,health_insurance_data,by="city")
+total <- total %>% group_by(city)
+
+fit.cholesterol = lm(cholesterol_screening_value~health_insurance_value, data=total)
+plot(total$health_insurance_value, total$cholesterol_screening_value,
+      xlab="nedostatak zdravstvenog osiguranja", 
+     ylab="snimanje kolesterola")
+lines(total$health_insurance_value,fit.cholesterol$fitted.values,col='red') 
+#graficki prikaz procijenjenih vrijednosti iz modela
+
+```
+
+
+
+
